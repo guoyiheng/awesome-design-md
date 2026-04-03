@@ -10,6 +10,7 @@
 <link rel="icon" href="https://api.iconify.design/carbon:ibm-engineering-systems-design-rhapsody.svg" type="image/svg+xml">
 <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="./design-data.js"></script>
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 <style>
   :root {
     --bg: #1f2228;
@@ -395,7 +396,18 @@
   .preview-toggle {
     display: inline-flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
+    color: var(--text-secondary);
+    font-family: var(--font-display);
+    font-size: 11px;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  #previewModeLabel {
+    font-family: var(--font-display);
+    text-transform: uppercase;
   }
 
   .switch {
@@ -653,6 +665,7 @@
 </style>
 </head>
 <body>
+<div id="app">
 <header class="topbar">
   <div class="topbar-inner">
     <a class="brand" href="#top">
@@ -661,9 +674,9 @@
     </a>
     <div class="topbar-actions">
       <label class="theme-toggle" for="themeToggle">
-        <span id="themeLabel">Dark</span>
+        <span>{{ isLightTheme ? 'Light' : 'Dark' }}</span>
         <span class="switch">
-          <input id="themeToggle" class="switch-input" type="checkbox" role="switch" aria-label="Toggle light mode">
+          <input id="themeToggle" class="switch-input" type="checkbox" role="switch" aria-label="Toggle light mode" v-model="isLightTheme">
           <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
         </span>
       </label>
@@ -687,11 +700,11 @@
         <div class="hero-panel-label">Collection summary</div>
         <div class="hero-stats">
           <div class="stat">
-            <strong id="designCount">54</strong>
+            <strong id="designCount">{{ designs.length }}</strong>
             <span>design systems</span>
           </div>
           <div class="stat">
-            <strong id="categoryCount">6</strong>
+            <strong id="categoryCount">{{ categoryGroups.length }}</strong>
             <span>categories</span>
           </div>
           <div class="stat">
@@ -709,10 +722,22 @@
 
   <section class="controls" aria-label="Search and filter">
     <div class="controls-row">
-      <input id="searchInput" class="search" type="search" placeholder="Search design, slug, or category" autocomplete="off">
-      <div class="result-count" id="resultCount">54 / 54 visible</div>
+      <input id="searchInput" class="search" type="search" placeholder="Search design, slug, or category" autocomplete="off" v-model="searchQuery">
+      <div class="result-count" id="resultCount">{{ filteredDesigns.length }} / {{ designs.length }} visible</div>
     </div>
-    <div class="chips" id="categoryChips" role="tablist" aria-label="Categories"></div>
+    <div class="chips" id="categoryChips" role="tablist" aria-label="Categories">
+      <button
+        v-for="chip in chips"
+        :key="chip.value"
+        class="chip"
+        :class="{ 'is-active': chip.value === activeCategory }"
+        type="button"
+        :aria-pressed="chip.value === activeCategory ? 'true' : 'false'"
+        @click="activeCategory = chip.value"
+      >
+        {{ chip.label }}
+      </button>
+    </div>
   </section>
 
   <section id="collection">
@@ -721,16 +746,47 @@
       </div>
 
       <div class="preview-toggle" aria-label="Preview mode switch">
-        <span id="previewModeLabel">preview</span>
+        <span id="previewModeLabel">{{ isDarkPreview ? 'preview-dark' : 'preview' }}</span>
         <label class="switch">
-          <input id="previewModeSwitch" class="switch-input" type="checkbox" role="switch" aria-label="Toggle preview dark mode">
+          <input id="previewModeSwitch" class="switch-input" type="checkbox" role="switch" aria-label="Toggle preview dark mode" v-model="isDarkPreview">
           <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
         </label>
       </div>
     </div>
 
-    <div class="grid" id="cardGrid"></div>
-    <div class="empty-state" id="emptyState">No matches. Try a different search term or clear the active category.</div>
+    <div class="grid" id="cardGrid">
+      <article
+        v-for="design in filteredDesigns"
+        :key="design.slug"
+        class="card"
+        :data-slug="design.slug"
+        :data-name="design.name"
+        :data-category="design.category"
+      >
+        <div class="preview-shell" :data-preview-label="isDarkPreview ? 'preview-dark.html' : 'preview.html'">
+          <iframe
+            class="preview-frame"
+            :title="`${design.name} preview`"
+            :src="isDarkPreview ? design.previewDark : design.preview"
+            loading="lazy"
+            referrerpolicy="no-referrer"
+          ></iframe>
+        </div>
+        <div class="card-body">
+          <div class="card-kicker">
+            <span>{{ design.category }}</span>
+            <span>{{ design.slug }}</span>
+          </div>
+          <h3 class="card-title">{{ design.name }}</h3>
+          <div class="card-links">
+            <a class="card-link" :href="design.preview" target="_blank" rel="noreferrer">Open preview</a>
+            <a class="card-link" :href="design.previewDark" target="_blank" rel="noreferrer">Dark preview</a>
+            <a class="card-link" :href="design.designMd" target="_blank" rel="noreferrer">DESIGN.md</a>
+          </div>
+        </div>
+      </article>
+    </div>
+    <div class="empty-state" id="emptyState" v-show="filteredDesigns.length === 0">No matches. Try a different search term or clear the active category.</div>
   </section>
 
   <footer class="footer">
@@ -741,142 +797,58 @@
     </div>
   </footer>
 </main>
+</div>
 
 <script>
-  const designIndex = window.__DESIGN_INDEX__ || { categories: [], designs: [] };
-  const categoryGroups = designIndex.categories || [];
-  const designs = designIndex.designs || [];
+  const { createApp } = Vue;
 
-  const categoryState = { active: 'All' };
-  const searchInput = document.getElementById('searchInput');
-  const cardGrid = document.getElementById('cardGrid');
-  const categoryChips = document.getElementById('categoryChips');
-  const resultCount = document.getElementById('resultCount');
-  const emptyState = document.getElementById('emptyState');
-  const designCount = document.getElementById('designCount');
-  const categoryCount = document.getElementById('categoryCount');
-  const previewModeSwitch = document.getElementById('previewModeSwitch');
-  const previewModeLabel = document.getElementById('previewModeLabel');
-  const themeToggle = document.getElementById('themeToggle');
-  const themeLabel = document.getElementById('themeLabel');
+  createApp({
+    data() {
+      const designIndex = window.__DESIGN_INDEX__ || { categories: [], designs: [] };
+      const storedTheme = window.localStorage.getItem('awesome-design-md-theme');
+      const preferredLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+      const initialLightTheme = storedTheme === 'light' || (!storedTheme && preferredLight);
 
-  const previewState = { mode: 'light' };
-  const themeState = { value: 'dark' };
-
-  const storedTheme = window.localStorage.getItem('awesome-design-md-theme');
-  const preferredLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
-  themeState.value = storedTheme === 'light' || (!storedTheme && preferredLight) ? 'light' : 'dark';
-  document.body.dataset.theme = themeState.value;
-  themeToggle.checked = themeState.value === 'light';
-  themeLabel.textContent = themeState.value === 'light' ? 'Light' : 'Dark';
-
-  designCount.textContent = String(designs.length);
-  categoryCount.textContent = String(categoryGroups.length);
-
-  const chips = [
-    { label: 'All', value: 'All' },
-    ...categoryGroups.map((group) => ({ label: `${group.label} (${group.items.length})`, value: group.label }))
-  ];
-
-  function escapeHtml(value) {
-    return value
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;')
-      .replaceAll('"', '&quot;')
-      .replaceAll("'", '&#39;');
-  }
-
-  function matchDesign(design, query) {
-    if (!query) return true;
-    const haystack = `${design.name} ${design.slug} ${design.category}`.toLowerCase();
-    return haystack.includes(query);
-  }
-
-  function renderChips() {
-    categoryChips.innerHTML = chips.map((chip) => `
-      <button
-        class="chip ${chip.value === categoryState.active ? 'is-active' : ''}"
-        type="button"
-        data-value="${escapeHtml(chip.value)}"
-        aria-pressed="${chip.value === categoryState.active ? 'true' : 'false'}"
-      >
-        ${escapeHtml(chip.label)}
-      </button>
-    `).join('');
-
-    categoryChips.querySelectorAll('.chip').forEach((button) => {
-      button.addEventListener('click', () => {
-        categoryState.active = button.dataset.value || 'All';
-        render();
-      });
-    });
-  }
-
-  function renderCards(list) {
-    const isDarkMode = previewState.mode === 'dark';
-    const previewLabel = isDarkMode ? 'preview-dark.html' : 'preview.html';
-
-    cardGrid.innerHTML = list.map((design) => `
-      <article class="card" data-slug="${escapeHtml(design.slug)}" data-name="${escapeHtml(design.name)}" data-category="${escapeHtml(design.category)}">
-        <div class="preview-shell" data-preview-label="${escapeHtml(previewLabel)}">
-          <iframe
-            class="preview-frame"
-            title="${escapeHtml(design.name)} preview"
-            src="${escapeHtml(isDarkMode ? design.previewDark : design.preview)}"
-            loading="lazy"
-            referrerpolicy="no-referrer"
-          ></iframe>
-        </div>
-        <div class="card-body">
-          <div class="card-kicker">
-            <span>${escapeHtml(design.category)}</span>
-            <span>${escapeHtml(design.slug)}</span>
-          </div>
-          <h3 class="card-title">${escapeHtml(design.name)}</h3>
-          <div class="card-links">
-            <a class="card-link" href="${escapeHtml(design.preview)}" target="_blank" rel="noreferrer">Open preview</a>
-            <a class="card-link" href="${escapeHtml(design.previewDark)}" target="_blank" rel="noreferrer">Dark preview</a>
-            <a class="card-link" href="${escapeHtml(design.designMd)}" target="_blank" rel="noreferrer">DESIGN.md</a>
-          </div>
-        </div>
-      </article>
-    `).join('');
-  }
-
-  function render() {
-    const query = searchInput.value.trim().toLowerCase();
-    const filtered = designs.filter((design) => {
-      const categoryOk = categoryState.active === 'All' || design.category === categoryState.active;
-      return categoryOk && matchDesign(design, query);
-    });
-
-    renderChips();
-    renderCards(filtered);
-
-    resultCount.textContent = `${filtered.length} / ${designs.length} visible`;
-    emptyState.style.display = filtered.length ? 'none' : 'block';
-    previewModeLabel.textContent = previewState.mode === 'dark' ? 'preview-dark' : 'preview';
-    previewModeSwitch.checked = previewState.mode === 'dark';
-  }
-
-  themeToggle.addEventListener('change', () => {
-    themeState.value = themeToggle.checked ? 'light' : 'dark';
-    document.body.dataset.theme = themeState.value;
-    themeLabel.textContent = themeState.value === 'light' ? 'Light' : 'Dark';
-    window.localStorage.setItem('awesome-design-md-theme', themeState.value);
-  });
-
-  previewModeSwitch.addEventListener('change', () => {
-    previewState.mode = previewModeSwitch.checked ? 'dark' : 'light';
-    render();
-  });
-
-  searchInput.addEventListener('input', render);
-
-  renderChips();
-  renderCards(designs);
-  render();
+      return {
+        categoryGroups: designIndex.categories || [],
+        designs: designIndex.designs || [],
+        searchQuery: '',
+        activeCategory: 'All',
+        isDarkPreview: false,
+        isLightTheme: initialLightTheme
+      };
+    },
+    computed: {
+      chips() {
+        return [
+          { label: 'All', value: 'All' },
+          ...this.categoryGroups.map((group) => ({
+            label: `${group.label} (${group.items.length})`,
+            value: group.label
+          }))
+        ];
+      },
+      filteredDesigns() {
+        const query = this.searchQuery.trim().toLowerCase();
+        return this.designs.filter((design) => {
+          const categoryOk = this.activeCategory === 'All' || design.category === this.activeCategory;
+          if (!categoryOk) return false;
+          if (!query) return true;
+          const haystack = `${design.name} ${design.slug} ${design.category}`.toLowerCase();
+          return haystack.includes(query);
+        });
+      }
+    },
+    watch: {
+      isLightTheme(value) {
+        document.body.dataset.theme = value ? 'light' : 'dark';
+        window.localStorage.setItem('awesome-design-md-theme', value ? 'light' : 'dark');
+      }
+    },
+    mounted() {
+      document.body.dataset.theme = this.isLightTheme ? 'light' : 'dark';
+    }
+  }).mount('#app');
 </script>
 </body>
 </html>
