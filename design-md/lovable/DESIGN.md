@@ -1,4 +1,4 @@
-# Design System Inspired by Lovable
+# Design System: Lovable
 
 ## 1. Visual Theme & Atmosphere
 

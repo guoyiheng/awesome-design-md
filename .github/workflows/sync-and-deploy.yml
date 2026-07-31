@@ -27,16 +27,21 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          PRE_SYNC_COMMIT=$(git rev-parse HEAD)
+
           git remote add upstream https://github.com/VoltAgent/awesome-design-md.git || true
           git fetch upstream main
 
           echo "Merging upstream/main..."
           git merge upstream/main -m "auto-sync: merge latest upstream md files" || {
-            echo "Conflict detected, resolving..."
+            echo "Conflict detected, resolving with ours strategy..."
             git checkout --ours .
             git add .
             git commit -m "auto-sync: merge upstream md files with resolution"
           }
+
+          echo "Ensuring existing preview HTML files are preserved..."
+          git checkout $PRE_SYNC_COMMIT -- 'design-md/**/preview*.html' 2>/dev/null || true
 
       - name: Generate Design Index
         run: npm run generate:index
@@ -47,7 +52,7 @@ jobs:
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "auto-sync: update design index and sync upstream files"
+            git commit -m "auto-sync: update design index and sync upstream files [skip ci]"
             git push origin main
           fi
 
