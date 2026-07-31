@@ -37,10 +37,10 @@ function parseReadmeCategories(readme) {
     if (!itemMatch || !currentCategory) continue;
 
     const url = itemMatch[2];
-    const slugMatch = url.match(/design-md\/([^/]+)\/?$/);
+    const slugMatch = url.match(/(?:getdesign\.md\/|design-md\/)([^/]+)/i);
     if (!slugMatch) continue;
 
-    categoryBySlug.set(slugMatch[1], currentCategory);
+    categoryBySlug.set(slugMatch[1].toLowerCase(), currentCategory);
   }
 
   return categoryBySlug;
@@ -106,6 +106,29 @@ function toDisplayName(slug) {
   return explicit[slug] || titleizeSlug(slug);
 }
 
+function parseDesignMd(content) {
+  const meta = { description: '', colors: [] };
+  const frontmatterMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!frontmatterMatch) return meta;
+
+  const yaml = frontmatterMatch[1];
+
+  const descMatch = yaml.match(/description:\s*(?:"([^"]+)"|'([^']+)'|([^\r\n]+))/);
+  if (descMatch) {
+    meta.description = (descMatch[1] || descMatch[2] || descMatch[3] || '').trim();
+  }
+
+  const colorsSection = yaml.match(/colors:\s*\r?\n([\s\S]*?)(?=\r?\n\w+:|$)/);
+  if (colorsSection) {
+    const hexes = colorsSection[1].match(/#[0-9a-fA-F]{3,8}\b/g);
+    if (hexes) {
+      meta.colors = Array.from(new Set(hexes.map((c) => c.toLowerCase()))).slice(0, 6);
+    }
+  }
+
+  return meta;
+}
+
 async function main() {
   const readme = await fs.readFile(readmePath, 'utf8');
   const categoryBySlug = parseReadmeCategories(readme);
@@ -122,22 +145,40 @@ async function main() {
     const designMdPath = path.join(folderPath, 'DESIGN.md');
 
     try {
-      await Promise.all([
-        fs.access(previewPath),
-        fs.access(previewDarkPath),
-        fs.access(designMdPath)
-      ]);
+      await fs.access(designMdPath);
     } catch {
       continue;
     }
 
+    let hasPreview = false;
+    let hasPreviewDark = false;
+    try {
+      await fs.access(previewPath);
+      hasPreview = true;
+    } catch {}
+
+    try {
+      await fs.access(previewDarkPath);
+      hasPreviewDark = true;
+    } catch {}
+
+    let meta = { description: '', colors: [] };
+    try {
+      const mdContent = await fs.readFile(designMdPath, 'utf8');
+      meta = parseDesignMd(mdContent);
+    } catch {}
+
     designs.push({
       slug,
       name: toDisplayName(slug),
-      category: categoryBySlug.get(slug) || 'Uncategorized',
-      preview: `design-md/${slug}/preview.html`,
-      previewDark: `design-md/${slug}/preview-dark.html`,
-      designMd: `design-md/${slug}/DESIGN.md`
+      category: categoryBySlug.get(slug.toLowerCase()) || 'Uncategorized',
+      hasPreview,
+      hasPreviewDark,
+      preview: hasPreview ? `design-md/${slug}/preview.html` : null,
+      previewDark: hasPreviewDark ? `design-md/${slug}/preview-dark.html` : (hasPreview ? `design-md/${slug}/preview.html` : null),
+      designMd: `design-md/${slug}/DESIGN.md`,
+      description: meta.description,
+      colors: meta.colors
     });
   }
 

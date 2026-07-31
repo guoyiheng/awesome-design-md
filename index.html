@@ -518,6 +518,41 @@
     z-index: 1;
   }
 
+  .preview-spec-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 100%;
+    padding: 16px;
+    background: var(--preview-canvas);
+    color: var(--text);
+  }
+
+  .spec-desc {
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text-secondary);
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .color-swatches {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 12px;
+  }
+
+  .color-swatch {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    border: 1px solid var(--border-strong);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+
   .card-body {
     display: flex;
     flex-direction: column;
@@ -763,14 +798,27 @@
         :data-name="design.name"
         :data-category="design.category"
       >
-        <div class="preview-shell" :data-preview-label="isDarkPreview ? 'preview-dark.html' : 'preview.html'">
+        <div class="preview-shell" :data-preview-label="design.hasPreview ? (isDarkPreview ? 'preview-dark.html' : 'preview.html') : 'DESIGN.md'">
           <iframe
+            v-if="design.hasPreview"
             class="preview-frame"
             :title="`${design.name} preview`"
-            :src="isDarkPreview ? design.previewDark : design.preview"
+            :src="isDarkPreview ? (design.previewDark || design.preview) : design.preview"
             loading="lazy"
             referrerpolicy="no-referrer"
           ></iframe>
+          <div v-else class="preview-spec-card">
+            <p class="spec-desc">{{ design.description || 'System design tokens and analysis specifications captured in DESIGN.md format.' }}</p>
+            <div class="color-swatches" v-if="design.colors && design.colors.length">
+              <div
+                v-for="(color, idx) in design.colors"
+                :key="idx"
+                class="color-swatch"
+                :style="{ backgroundColor: color }"
+                :title="color"
+              ></div>
+            </div>
+          </div>
         </div>
         <div class="card-body">
           <div class="card-kicker">
@@ -779,8 +827,8 @@
           </div>
           <h3 class="card-title">{{ design.name }}</h3>
           <div class="card-links">
-            <a class="card-link" :href="design.preview" target="_blank" rel="noreferrer">Open preview</a>
-            <a class="card-link" :href="design.previewDark" target="_blank" rel="noreferrer">Dark preview</a>
+            <a v-if="design.hasPreview" class="card-link" :href="design.preview" target="_blank" rel="noreferrer">Open preview</a>
+            <a v-if="design.hasPreviewDark" class="card-link" :href="design.previewDark" target="_blank" rel="noreferrer">Dark preview</a>
             <a class="card-link" :href="design.designMd" target="_blank" rel="noreferrer">DESIGN.md</a>
           </div>
         </div>

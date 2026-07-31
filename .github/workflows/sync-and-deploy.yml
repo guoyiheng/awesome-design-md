@@ -1,0 +1,62 @@
+name: Upstream Sync and Cloudflare Deploy
+
+on:
+  schedule:
+    - cron: '0 */6 * * *' # Run every 6 hours
+  workflow_dispatch: # Allow manual trigger from GitHub UI
+
+permissions:
+  contents: write
+
+jobs:
+  sync-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Sync from Upstream Repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git remote add upstream https://github.com/VoltAgent/awesome-design-md.git || true
+          git fetch upstream main
+
+          echo "Merging upstream/main..."
+          git merge upstream/main -m "auto-sync: merge latest upstream md files" || {
+            echo "Conflict detected, resolving..."
+            git checkout --ours .
+            git add .
+            git commit -m "auto-sync: merge upstream md files with resolution"
+          }
+
+      - name: Generate Design Index
+        run: npm run generate:index
+
+      - name: Commit and Push Changes
+        run: |
+          git add design-data.js README.md design-md/
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "auto-sync: update design index and sync upstream files"
+            git push origin main
+          fi
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: awesome-design-md
+          directory: .
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
