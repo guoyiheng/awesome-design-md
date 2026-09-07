@@ -1,5 +1,5 @@
 window.__DESIGN_INDEX__ = {
-  "generatedAt": "2026-09-07T01:56:52.595Z",
+  "generatedAt": "2026-09-07T11:03:49.384Z",
   "categories": [
     {
       "label": "AI & LLM Platforms",
